@@ -7,54 +7,87 @@ from torch.utils.data import DataLoader, Dataset
 import os
 import torch.nn.functional as F
 
+n_fft = 1000
+hop = 100
 
 def create_2d_numpy(filename : str) -> np.ndarray:
-    waveform, sr = librosa.load(filename)
+    waveform, sr = librosa.load(filename, sr = 16000)
 
     # Compute the Short-Time Fourier Transform (STFT)
-    stft = librosa.stft(waveform)
+    stft = librosa.stft(waveform, n_fft=n_fft, hop_length=hop)
     # Convert to power spectrogram
     PS = np.abs(stft)**2
-    
-    return librosa.power_to_db(PS, ref=np.max)
+    return librosa.power_to_db(PS, ref=np.max)      
+
+# Dont do power to DB?
 
 def create_dataset(directory) -> Dataset:
     clap_bool_list : list = []
     
     soundlist : list = []    
      
+    print("claps")    
     clapdir = directory + "/claps"
     for filename in os.listdir(clapdir):
         f = os.path.join(clapdir, filename)
-        soundlist.append(create_2d_numpy(f))
+        new = create_2d_numpy(f)
+        soundlist.append(new)
         clap_bool_list.append(1.0)
 
     nonclapdir = directory + "/not-claps"
-    
+    print("non_claps")    
     for filename in os.listdir(nonclapdir):
         f = os.path.join(nonclapdir, filename)
-        soundlist.append(create_2d_numpy(f))
+        new = create_2d_numpy(f)
+        soundlist.append(new)
         clap_bool_list.append(0.0)
 
     clap_bool_np_array : np.ndarray = np.array(clap_bool_list)
-
     soundlist : np.ndarray = np.array(soundlist)
     dataset : CustomClapDataset = CustomClapDataset(soundlist, clap_bool_np_array)
     return dataset
 
+def plot(data):
+    plt.figure(figsize=(10, 4))
+    librosa.display.specshow(data, sr=len(data), x_axis='time', y_axis='log')
+    plt.colorbar(format='%+2.0f dB')
+    plt.title('Power spectrogram')
+    plt.tight_layout()
+    plt.show()
+
+def plot_claps():
+    nd = "/home/vegard/Documents/clap_bin/saag.wav"
+    plot(create_2d_numpy(nd))
+    clap = "../sounds/test_data/claps/20240228-230218.wav"
+    clap2 = "../sounds/test_data/claps/20240228-230242.wav"
+    print("claps:")
+    plot(create_2d_numpy(clap))
+    plot(create_2d_numpy(clap2))
+    print("non claps:")
+    non_clap = "../sounds/test_data/not-claps/20240228-221520.wav"
+    non_clap2 = "../sounds/test_data/not-claps/20240228-221131.wav"
+    non_clap3 = "../sounds/test_data/not-claps/20240228-221426.wav"
+    non_clap4 = "../sounds/test_data/not-claps/20240228-221756.wav"
+    plot(create_2d_numpy(non_clap))
+    plot(create_2d_numpy(non_clap2))
+    plot(create_2d_numpy(non_clap3))
+    plot(create_2d_numpy(non_clap4))
 
 def main():
     
-    batch_size = 64
+    batch_size = 1
     epochs = 1000 
     best_loss = float("inf") 
     patience = 0
 
     train_dataset = create_dataset("../sounds/training_data")
     test_dataset = create_dataset("../sounds/test_data")
+
+    #plot_claps()
+
     # Create data loaders.
-    train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle = True)
-    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle = True)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle = True)
         
     device = (
         "cuda"
@@ -65,7 +98,7 @@ def main():
 
     loss_fn = nn.BCEWithLogitsLoss()
     model = NeuralNetwork().to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.00001)
     for epoch in range(epochs):
         print("Epoch ", epoch)
         train(train_dataloader, model, loss_fn, optimizer)
@@ -81,8 +114,6 @@ def main():
         if patience == 10:
             print("Patience spent")
             break
-            
-
     return
 
 def train(dataloader, model, loss_fn, optimizer):
@@ -133,6 +164,12 @@ class CustomClapDataset(Dataset):
         power_spectogram = self.dataset[idx]
         label = self.labels[idx]
         return power_spectogram, label
+
+# andrewNG concolutional neural network 
+# MAX
+# residual layers
+# Amplitude spectogram istedenfor power spectrogram?
+# Mel-frequency cepstral coefficientse
 
 
 # Define model
