@@ -3,18 +3,18 @@ import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
 
-def display_power_spectrogram(audio_path):
+def display_power_spectrogram(S_dB):
     # Load the audio file
-    y, sr = librosa.load(audio_path, sr=None)
+   # y, sr = librosa.load(audio_path, sr=None)
 
-    # Compute the Short-Time Fourier Transform (STFT) of the audio
-    D = librosa.stft(y)
+   # # Compute the Short-Time Fourier Transform (STFT) of the audio
+   # D = librosa.stft(y)
 
-    # Convert the amplitude spectrogram to a power spectrogram (magnitude squared)
-    S = np.abs(D)**2
+   # # Convert the amplitude spectrogram to a power spectrogram (magnitude squared)
+   # S = np.abs(D)**2
 
-    # Convert to decibels for better visualization
-    S_dB = librosa.power_to_db(S, ref=np.max)
+   # # Convert to decibels for better visualization
+   # S_dB = librosa.power_to_db(S, ref=np.max)
 
     # Plot the power spectrogram
     plt.figure(figsize=(10, 6))
@@ -26,5 +26,5 @@ def display_power_spectrogram(audio_path):
     plt.title('Power Spectrogram')
     plt.show()
 
-audio_path = '/home/vegard/Documents/clap_dataset/1.wav'
-display_power_spectrogram(audio_path)
+#audio_path = '/home/vegard/Documents/clap_dataset/1.wav'
+#display_power_spectrogram(audio_path)
