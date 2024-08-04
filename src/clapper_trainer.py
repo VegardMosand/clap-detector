@@ -8,22 +8,12 @@ import os
 import torch.nn.functional as F
 from torch.optim import Adam
 from audio_visualizer import *
+from clap_utils import create_2d_numpy
 
-n_fft = 128
-hop = 8
+from clap_nn import ClapDetectNN
+
 debug = False
 
-def create_2d_numpy(filename : str) -> np.ndarray:
-    waveform, sr = librosa.load(filename, sr = 16000)
-
-    # Compute the Short-Time Fourier Transform (STFT)
-    stft = librosa.stft(waveform, n_fft=n_fft, hop_length=hop)
-    #mfccs = librosa.feature.mfcc(y=waveform, sr=sr, n_mfcc=13)
-    # Convert to amp spectrogram (uncomment below for power spectrogram)
-    PS = np.abs(stft) **2
-    return librosa.power_to_db(PS, ref=np.max)      
-
-# Dont do power to DB?
 
 def create_dataset(directory) -> Dataset:
     clap_bool_list : list = []
@@ -38,7 +28,6 @@ def create_dataset(directory) -> Dataset:
         new = create_2d_numpy(f)
         soundlist.append(new)
         clap_bool_list.append(1.0)
-        librosa.display.specshow(new, sr=16000, x_axis='time', y_axis='mel')
         if (debug and i % 100 == 0):
             display_power_spectrogram(new)
             
@@ -64,26 +53,12 @@ def train(dataloader, model, loss_fn, optimizer):
     #model.train()
     running_loss = 0
     for batch, (sound, label) in enumerate(dataloader):
-        # Compute prediction and loss
-        #pred = model(X)
-        #loss = loss_fn(pred, Y.unsqueeze(0))
-
-        # zero the parameter gradients
         optimizer.zero_grad()
-        # predict classes using sounds from the training set
         prediction = model(sound)
-        # compute the loss based on model output and real labels
-       # print(prediction, label.unsqueeze(0))
         loss : torch.tensor = loss_fn(prediction, label.unsqueeze(0))
-        # backpropagate the loss
         loss.backward()
-        # adjust parameters based on the calculated gradients
         optimizer.step()
 
-        # Backpropagation
-        #optimizer.zero_grad()
-        #loss.backward()
-        #optimizer.step()
         running_loss += loss.item()
         if batch % 200 == 199:
             current = batch * len(sound)
@@ -93,7 +68,6 @@ def train(dataloader, model, loss_fn, optimizer):
 def test(dataloader, model, loss_fn):
     size = len(dataloader)
     num_batches = len(dataloader)
-    #model.eval()
     test_loss, correct = 0, 0
     with torch.no_grad():
         for X, Y in dataloader:
@@ -110,7 +84,7 @@ def test(dataloader, model, loss_fn):
 
 class CustomClapDataset(Dataset):
     def __init__(self, dataset, labels, transform=None, target_transform=None):
-        self.dataset : torch.tensor = torch.from_numpy(dataset).unsqueeze(1) # Remove unsqueeze?
+        self.dataset : torch.tensor = torch.from_numpy(dataset).unsqueeze(1)
         self.labels : torch.tensor = torch.from_numpy(labels)
         self.transform = transform
         self.target_transform = target_transform
@@ -123,54 +97,6 @@ class CustomClapDataset(Dataset):
         label = self.labels[idx]
         return power_spectogram, label
 
-# andrewNG concolutional neural network 
-# MAX
-# residual layers
-# Amplitude spectogram istedenfor power spectrogram?
-# Mel-frequency cepstral coefficientse
-
-
-# Define model
-class NeuralNetwork(nn.Module):
-    def __init__(self):
-        super(NeuralNetwork, self).__init__()
-
-       # self.final_width = 32
-       # self.final_reduced_num_frequencies = 256
-       # self.num_classes = 1
-
-        self.bn1 = nn.BatchNorm2d(16)
-        self.bn2 = nn.BatchNorm2d(16)
-        self.bn3 = nn.BatchNorm2d(16)
-        self.bn4 = nn.BatchNorm2d(32)
-        self.pool = nn.MaxPool2d(3, 2) #(kernel_size=2, stride=2, padding=0)
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)  # Assuming mono channel input
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.fc1 = nn.Linear(47520, 1)
-
-    def forward(self, input):
-        output = F.relu(self.bn1(self.conv1(input)))      
-        output = self.pool(output)
-        output = F.relu(self.bn2(self.conv2(output)))     
-        output = self.pool(output)
-        output = F.relu(self.bn3(self.conv3(output)))     
-        output = F.relu(self.bn4(self.conv4(output)))     
-        output = output.view(-1, 47520)        # 64
-        output = self.fc1(output)
-        #output = torch.nn.Sigmoid(output)
-
-        #x = self.pool(F.relu(self.conv1(x)))
-        #x = self.pool(F.relu(self.conv2(x)))
-        #final_downsampled_width = 32
-        #final_reduced_num_frequencies = 256
-        ## Additional convolutional operations can be applied here
-        #x = x.view(-1, final_reduced_num_frequencies * final_downsampled_width)  # Flatten the output for the fully connected layer
-        #x = F.relu(self.fc1(x))
-        #x = self.fc2(x)
-        return output 
-
 def main():
     batch_size = 1
     epochs = 1000 
@@ -179,8 +105,6 @@ def main():
 
     train_dataset = create_dataset("../sounds/training_data")
     test_dataset = create_dataset("../sounds/test_data")
-
-    #plot_claps()
 
     # Create data loaders.
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True)
@@ -193,9 +117,7 @@ def main():
     )
     print(f"Using {device} device")
 
-    model = NeuralNetwork().to(device)
-   # loss_fn = nn.CrossEntropyLoss()
-   # optimizer = Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+    model = ClapDetectNN().to(device)
 
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.00001)
@@ -217,6 +139,3 @@ def main():
     return
     
 main()
-
-# https://chat.openai.com/c/5e70a21e-8dc7-45c2-af6b-8959c6bf8d59
-# Ses siste svaret
