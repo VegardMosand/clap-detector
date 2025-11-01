@@ -14,8 +14,8 @@ from clap_nn import ClapDetectNN
 
 debug = False
 
-
 def create_dataset(directory) -> Dataset:
+    # 1.0 if clap. 0.0 if not
     clap_bool_list : list = []
     
     soundlist : list = []    
@@ -71,6 +71,7 @@ def test(dataloader, model, loss_fn):
     test_loss, correct = 0, 0
     with torch.no_grad():
         for X, Y in dataloader:
+            print(X.shape)
             pred = model(X)
             loss = loss_fn(pred, Y.unsqueeze(0)).item()
             test_loss += loss
@@ -128,8 +129,7 @@ def main():
         if  accuracy < best_accuracy:
             best_accuracy = accuracy
             patience = 0
-            # Save the model if you want to keep the best one
-            torch.save(model.state_dict(), "../target/the_clapper.pth")
+            #torch.save(model.state_dict(), "../target/the_clapper.pth")
         else:
             patience += 1
         
