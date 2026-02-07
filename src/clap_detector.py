@@ -14,7 +14,10 @@ from torch import nn
 from clap_nn import ClapDetectNN
 from clap_utils import create_PS 
 from clap_utils import create_2d_numpy
-import wave
+import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
+import json
+
 
 sample_rate = 16000
 sensitivity = 0.55 #0.05
@@ -66,15 +69,20 @@ def chunk_generator2():
             build_chunk = new_chunk
 
 def clap_listener():
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="python-mqtt5-pub", protocol=mqtt.MQTTv5)
     model = ClapDetectNN()
     model.load_state_dict(torch.load("../target/the_clapper.pth"))
     model.eval()
     loss_fn = nn.BCEWithLogitsLoss()
 
+    mqtt_client.username_pw_set("clap_sensor", "obbhao2yb029blw999fiooplnbuwskgh1u")
+
+    mqtt_client.connect("192.168.0.106", 1883, 60) # Broker address, port, keepalive interval
+
+
     # hop length is half of frame length to have 50% overlap. This is to make sure a clap is at the 
     # start (at least almost) of a frame. To avoid a clap being counted twice the first chunk after a clap detection is ignored
 
-    #stream = librosa.stream(path=livefile, block_length=1, frame_length=3200, hop_length=1600, mono=True, dtype=np.float32)
     #losslist = []
     stream =  chunk_generator2()
     reslist = [1.0]
@@ -85,6 +93,25 @@ def clap_listener():
 
     prevclap = False
 
+    DISCOVERY_TOPIC = "homeassistant/device_automation/python_mqtt_device/python_button/config"
+    TRIGGER_TOPIC   = "sounds/claps/double"
+
+    discovery_payload = {
+    "automation_type": "trigger",
+    "type": "clap",
+    "subtype": "double",
+    "topic": TRIGGER_TOPIC,
+    "payload": "",
+    "device": {
+        "identifiers": ["Clap_sensor1"],
+        "name": "Clap_sensor1",
+        "model": "thefirst",
+        "manufacturer": "Vegard Mosand"
+    }
+    }
+
+    mqtt_client.loop_start()
+    mqtt_client.publish(DISCOVERY_TOPIC, json.dumps(discovery_payload), qos=1, retain=True).wait_for_publish()
     with torch.no_grad():
         for chunk in stream:
             if(prevclap):
@@ -110,9 +137,10 @@ def clap_listener():
             loss : torch.tensor = loss_fn(prediction, reslist.unsqueeze(0))
 
             if (loss < sensitivity):
+                mqtt_client.publish(TRIGGER_TOPIC, "")
                 claps += 1
                 #losslist.append(loss)
-                print(f"Detected clap at {i*100}ms!! This was clap number {claps}. Loss: {loss}")
+                print(f"Detected clap at {i*100}ms!! This was clap number {claps}. Loss: {loss}\n")
                 #sf.write(f"../candidates/candidate_{i}.wav", chunk, 16000)
                 prevclap = True
             else:
